@@ -20,7 +20,7 @@
 ## Step 1: Load CSV into Spark DataFrame
 
 ```python
-# Load CSV with inferSchema (note some data type issues present)
+# Load CSV with inferSchema
 sales_df = spark.read.format("csv") \
     .option("header", True) \
     .option("inferSchema", True) \
