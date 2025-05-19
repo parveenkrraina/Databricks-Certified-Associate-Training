@@ -8,14 +8,12 @@
 - Query data using Spark SQL
 - Understand practical Delta Lake ingestion and transformation workflows
 
----
 
 ### Prerequisites
 - Access to Databricks or Azure Synapse Spark pool
 - Sample data CSV file uploaded to workspace/storage (`sales.csv`)
 - Basic familiarity with PySpark and SQL
 
----
 
 ## Step 1: Load CSV into Spark DataFrame
 
@@ -30,7 +28,6 @@ print("Initial data sample:")
 sales_df.show(5)
 ```
 
----
 
 ## Step 2: Inspect Data and Identify Issues
 
@@ -39,7 +36,6 @@ sales_df.show(5)
 - Some columns have inconsistent data types (`Quantity`, `UnitPrice`, `TaxAmount`)
 - `ProductMetadata` contains JSON strings
 
----
 
 ## Step 3: Data Cleaning
 
@@ -82,7 +78,6 @@ print("Cleaned data sample:")
 sales_df_clean.show(5)
 ```
 
----
 
 ## Step 4: Write Cleaned Data as Delta Table
 
@@ -93,7 +88,6 @@ sales_df_clean.write.format("delta").mode("overwrite").saveAsTable("sales_delta_
 print("Cleaned Delta table created: sales_delta_cleaned")
 ```
 
----
 
 ## Step 5: Basic DataFrame Transformations
 
@@ -114,7 +108,6 @@ filtered_df.select(
 ).show(10)
 ```
 
----
 
 ## Step 6: Query Delta Table Using SQL
 
@@ -127,7 +120,6 @@ ORDER BY TotalSales DESC
 LIMIT 10;
 ```
 
----
 
 ## Optional Step 7: Parse JSON Column (`ProductMetadata`)
 
