@@ -1,5 +1,5 @@
 # Session 1 Hands-On Lab Guide
-## Data Ingestion with Delta Lake — Foundations, Setup, and Basic Transformations
+## Data Ingestion with Delta Lake
 
 ### Lab Objectives
 - Load a large sales dataset with common data issues into Delta Lake
