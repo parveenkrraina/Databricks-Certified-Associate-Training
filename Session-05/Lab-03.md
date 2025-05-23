@@ -206,7 +206,7 @@ Design and implement a Databricks workflow that ingests, merges, transforms, and
 
 1. **Tasks & Notebooks:**
     - **Ingest Sales Data:** Notebook reads sales data (`source=sales`).
-    - **Ingest Marketing Data:** Notebook reads marketing data (`source=marketing`).
+    - **Ingest Marketing Data:** Notebook reads marketing data (`source=product`).
     - **Merge & Transform Data:** Depends on both ingestion tasks. Merges DataFrames, applies filters, and adds a calculated column.
     - **Generate Combined Report:** Depends on merge task. Aggregates data and saves a combined report.
 
