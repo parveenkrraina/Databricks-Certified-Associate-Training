@@ -290,19 +290,31 @@ else:
 
 ```python
 # N2b_Handle_Invalid_Data
-dbutils.widgets.text("validator_task_key", "Task_Validate_Sales")
+
+# This notebook is called when sales data validation fails.
+dbutils.widgets.text("validator_task_key", "Task_Validate_Sales", "Task key of the validation notebook")
 validator_task_key = dbutils.widgets.get("validator_task_key")
 
-error_message = dbutils.taskValues.get(taskKey=validator_task_key, key="validation_error_message", default="No error message provided.")
-source_count = dbutils.taskValues.get(taskKey=validator_task_key, key="source_table_record_count", default=0)
+print("Handling invalid data scenario...")
 
-print(f"Data validation failed for task '{validator_task_key}'.")
-print(f"Source record count analyzed: {source_count}")
-print(f"Error details: {error_message}")
-print("NOTIFICATION (Simulated): Sales data validation failed.")
+try:
+    error_message = dbutils.taskValues.get(taskKey=validator_task_key, key="validation_error_message", default="No error message provided.", debugValue="Debug error message.")
+    source_count = dbutils.taskValues.get(taskKey=validator_task_key, key="source_table_record_count", default=0, debugValue=0)
+    
+    print(f"Data validation failed for task '{validator_task_key}'.")
+    print(f"Source record count: {source_count}")
+    print(f"Error details: {error_message}")
+    
+    # Simulate sending a notification or logging to a specific system
+    print("NOTIFICATION: Sales data validation failed. Please check the logs and data quality.")
+    # In a real scenario, you might integrate with PagerDuty, Slack, or email here.
 
-dbutils.taskValues.set(key="invalid_data_handling_status", value="COMPLETED_NOTIFICATION")
-dbutils.notebook.exit("Invalid data handling complete. Notification simulated.")
+    dbutils.taskValues.set(key="invalid_data_handling_status", value="COMPLETED_NOTIFICATION")
+    dbutils.notebook.exit("Invalid data handling complete. Notification simulated.")
+
+except Exception as e:
+    print(f"Error in N2b_Handle_Invalid_Data: {e}")
+    #dbutils.notebook.exit(f"Failed to handle invalid data: {e}")
 ```
 </details>
 
