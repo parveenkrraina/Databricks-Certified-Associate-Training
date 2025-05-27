@@ -1,0 +1,79 @@
+resources:
+  jobs:
+    Sales_Pipeline:
+      name: Sales Pipeline
+      description: complex workflow
+      max_concurrent_runs: 5
+      tasks:
+        - task_key: Task_Validate_Sales
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/N1_Validate_Sales_Data
+            base_parameters:
+              database_name: module2_db
+              sales_table_name: bronze_sales
+              force_valid_status_for_testing: "False"
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Task_Archive_Sales
+          depends_on:
+            - task_key: Task_Validate_Sales
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/N3_Archive_Raw_Sales
+            base_parameters:
+              database_name: module2_db
+              sales_table_name: bronze_sales
+              archive_path_base: dbfs:/FileStore/lab_data/archived_sales/
+              validator_task_key: Task_Validate_Sales
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Task_IfElse_Validation
+          depends_on:
+            - task_key: Task_Validate_Sales
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.Task_Validate_Sales.values.validation_status}}"
+            right: INVALID
+        - task_key: Task_Process_Sales
+          depends_on:
+            - task_key: Task_IfElse_Validation
+              outcome: "true"
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/N2_Process_Sales_Data
+            base_parameters:
+              database_name: module2_db
+              sales_table_name: bronze_sales
+              customers_table_name: bronze_customers
+              products_table_name: bronze_products
+              output_table_name: silver_sales_enriched
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Task_Loop_By_Category
+          depends_on:
+            - task_key: Task_Process_Sales
+          for_each_task:
+            inputs: '["Electronics", "Home", "Books", "Sports" ,"Beauty", "Clothing"]'
+            task:
+              task_key: SubTask_Process_Category_Data
+              notebook_task:
+                notebook_path: /Workspace/Databricks-Associate-DE/Session-6/N4_Process_Sales_By_Category
+                base_parameters:
+                  category_filter: "{{item}}"
+                  enriched_sales_table: silver_sales_enriched
+                  output_path_base: dbfs:/FileStore/lab_data/category_sales/
+                  database_name: module2_db
+                source: WORKSPACE
+              existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Task_Handle_Invalid_Data
+          depends_on:
+            - task_key: Task_IfElse_Validation
+              outcome: "false"
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/N2b_Handle_Invalid_Data
+            base_parameters:
+              validator_task_key: Task_Validate_Sales
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+      tags:
+        session: "03"
+      queue:
+        enabled: true

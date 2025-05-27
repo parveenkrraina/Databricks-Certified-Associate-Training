@@ -1,0 +1,14 @@
+resources:
+  jobs:
+    Scheduled_Sales_Load:
+      name: Scheduled_Sales_Load
+      tasks:
+        - task_key: "01"
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/scheduled_sales_load
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+      tags:
+        session: "02"
+      queue:
+        enabled: true

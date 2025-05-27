@@ -1,0 +1,42 @@
+resources:
+  jobs:
+    CustomerSalesAnalyticsWorkflow:
+      name: CustomerSalesAnalyticsWorkflow
+      description: Basic workflow demo-01
+      tasks:
+        - task_key: Ingest_Sales_Data
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-5/Lab/ingest_sales_data
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Ingest_Customer_Data
+          depends_on:
+            - task_key: Ingest_Sales_Data
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-5/Lab/ingest_customer_data
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Transform_and_Merge
+          depends_on:
+            - task_key: Ingest_Customer_Data
+            - task_key: Ingest_Sales_Data
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-5/Lab/transform_and_merge
+            base_parameters:
+              sales_json: "{{tasks.Ingest_Sales_Data.values.ingested_data_json}}"
+              demog_json: "{{tasks.Ingest_Customer_Data.values.ingested_customer_data_json}}"
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: Generate_Sales_Report
+          depends_on:
+            - task_key: Transform_and_Merge
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-5/Lab/generate_sales_report
+            base_parameters:
+              merged_json: "{{tasks.Transform_and_Merge.values.merged_data_json}}"
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+      tags:
+        session: "01"
+      queue:
+        enabled: true

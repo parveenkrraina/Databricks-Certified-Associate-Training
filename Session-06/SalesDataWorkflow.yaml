@@ -1,0 +1,53 @@
+resources:
+  jobs:
+    Sales_Data_Workflow:
+      name: Sales Data Workflow
+      description: sales data workflow to see the regional sales
+      tasks:
+        - task_key: 01_load_prepare
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/demo/01_load_prepare
+            base_parameters:
+              region: East
+              customer_type: Premium
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: 02_sales_summary
+          depends_on:
+            - task_key: 01_load_prepare
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/demo/02_sales_summary
+            base_parameters:
+              region: "{{tasks.01_load_prepare.values.region}}"
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: 03_summary_check
+          depends_on:
+            - task_key: 02_sales_summary
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/demo/03_summary_check
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+        - task_key: validate
+          depends_on:
+            - task_key: 03_summary_check
+          condition_task:
+            op: EQUAL_TO
+            left: "{{tasks.03_summary_check.values.notify}}"
+            right: "true"
+        - task_key: 04_notify
+          depends_on:
+            - task_key: validate
+              outcome: "true"
+          notebook_task:
+            notebook_path: /Workspace/Databricks-Associate-DE/Session-6/demo/04_notify
+            base_parameters:
+              notify: "{{tasks.03_summary_check.values.notify}}"
+            source: WORKSPACE
+          existing_cluster_id: 0524-192709-4uknyhz0
+          max_retries: -1
+          min_retry_interval_millis: 900000
+      tags:
+        session: 03-02-v1
+      queue:
+        enabled: true
