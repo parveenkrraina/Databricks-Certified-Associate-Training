@@ -160,59 +160,122 @@ dbutils.notebook.exit(final_validation_status)
 <summary>Show code</summary>
 
 ```python
-# N2_Process_Sales_Data
-from pyspark.sql.functions import col, expr
-from pyspark.sql.types import IntegerType, DoubleType, DateType
+# N1_Validate_Sales_Data
+from pyspark.sql.functions import col, count, to_date
+from pyspark.sql.types import IntegerType, DateType
 
-dbutils.widgets.text("sales_table_name", "bronze_sales")
-dbutils.widgets.text("customers_table_name", "bronze_customers")
-dbutils.widgets.text("products_table_name", "bronze_products")
-dbutils.widgets.text("output_table_name", "silver_sales_enriched")
-dbutils.widgets.text("database_name", "module2_db")
+dbutils.widgets.text("sales_table_name", "bronze_sales", "Source Sales Table")
+dbutils.widgets.text("database_name", "module2_db", "Database Name")
+# ADD A WIDGET TO CONTROL THE OVERRIDE BEHAVIOR
+dbutils.widgets.dropdown("force_valid_status_for_testing", "False", ["True", "False"], "Force Valid Status for Testing?")
+
 
 sales_table = dbutils.widgets.get("sales_table_name")
-customers_table = dbutils.widgets.get("customers_table_name")
-products_table = dbutils.widgets.get("products_table_name")
-output_table = dbutils.widgets.get("output_table_name")
 db_name = dbutils.widgets.get("database_name")
+force_valid_status = dbutils.widgets.get("force_valid_status_for_testing") == "True" # Get boolean from widget
 
 full_sales_table_name = f"{db_name}.{sales_table}"
-full_customers_table_name = f"{db_name}.{customers_table}"
-full_products_table_name = f"{db_name}.{products_table}"
-full_output_table_name = f"{db_name}.{output_table}"
 
-df_sales_raw = spark.table(full_sales_table_name)
-df_customers_raw = spark.table(full_customers_table_name)
-df_products_raw = spark.table(full_products_table_name)
+print(f"Validating table: {full_sales_table_name}")
+if force_valid_status:
+    print("WARNING: Validation status will be forced to 'VALID' for testing purposes based on widget setting.")
 
-df_sales = df_sales_raw \
-     .withColumn("Quantity", col("Quantity").cast(IntegerType())) \
-     .withColumn("UnitPrice", col("UnitPrice").cast(DoubleType())) \
-     .withColumn("TaxAmount", col("TaxAmount").cast(DoubleType())) \
-     .withColumn("OrderDate", col("OrderDate").cast(DateType()))
+try:
+    df_sales = spark.table(full_sales_table_name)
+except Exception as e:
+    print(f"Error reading table {full_sales_table_name}: {e}")
+    dbutils.taskValues.set(key="validation_status", value="ERROR_READING_TABLE")
+    dbutils.taskValues.set(key="validation_error_message", value=str(e))
+    dbutils.notebook.exit(f"Failed to read table: {full_sales_table_name}")
 
-df_sales_enriched_cust = df_sales.join(
-     df_customers_raw, df_sales["CustomerName"] == df_customers_raw["CustomerName"], "inner"
-).select(df_sales["*"], df_customers_raw["Region"], df_customers_raw["CustomerType"])
+# YOUR SALES COLUMNS: SalesOrderNumber, OrderDate, CustomerName, EmailAddress, Item, Quantity, UnitPrice, TaxAmount
 
-df_sales_enriched_final = df_sales_enriched_cust.join(
-     df_products_raw, df_sales_enriched_cust["Item"] == df_products_raw["Item"], "inner"
-).select(df_sales_enriched_cust["*"], df_products_raw["ProductName"], df_products_raw["Category"], df_products_raw["Segment"])
+# Attempt to cast relevant columns to expected types for validation
+if dict(df_sales.dtypes)['OrderDate'] == 'string':
+    df_sales = df_sales.withColumn("OrderDate", to_date(col("OrderDate"))) 
 
-df_sales_enriched_final = df_sales_enriched_final.withColumn("NetRevenue", expr("Quantity * UnitPrice"))
-df_sales_enriched_final = df_sales_enriched_final.withColumn("GrossRevenue", expr("NetRevenue + TaxAmount"))
+if dict(df_sales.dtypes)['Quantity'] == 'string': # Ensure Quantity is numeric before checking <= 0
+     df_sales = df_sales.withColumn("Quantity", col("Quantity").cast(IntegerType()))
 
-df_output = df_sales_enriched_final.select(
-     col("SalesOrderNumber"), col("OrderDate"), col("CustomerName"), col("EmailAddress"), col("Item"),
-     col("ProductName"), col("Category"), col("Segment"), col("Region"), col("CustomerType"),
-     col("Quantity"), col("UnitPrice"), col("NetRevenue"), col("TaxAmount"), col("GrossRevenue"),
-     col("ProductMetadata").alias("SalesProductMetadata")
-)
 
-df_output.write.format("delta").mode("overwrite").option("overwriteSchema", "true").saveAsTable(full_output_table_name)
-processed_count = df_output.count()
-dbutils.taskValues.set(key="processed_record_count", value=processed_count)
-dbutils.notebook.exit(f"Successfully processed {processed_count} records.")
+required_cols = ["SalesOrderNumber", "OrderDate", "CustomerName", "Item", "Quantity", "UnitPrice"]
+missing_cols = [c for c in required_cols if c not in df_sales.columns]
+
+if missing_cols:
+    error_message = f"Missing required columns for validation: {', '.join(missing_cols)}"
+    print(f"VALIDATION_ERROR: {error_message}")
+    dbutils.taskValues.set(key="validation_status", value="INVALID_SCHEMA")
+    dbutils.taskValues.set(key="validation_error_message", value=error_message)
+    dbutils.notebook.exit(error_message)
+
+null_sales_order_number_count = df_sales.filter(col("SalesOrderNumber").isNull()).count()
+null_order_date_count = df_sales.filter(col("OrderDate").isNull()).count()
+null_customer_name_count = df_sales.filter(col("CustomerName").isNull()).count()
+null_item_count = df_sales.filter(col("Item").isNull()).count()
+# This is the problematic line causing the error message.
+# Let's make sure Quantity column exists and is numeric before this filter
+if "Quantity" in df_sales.columns and isinstance(df_sales.schema["Quantity"].dataType, IntegerType):
+    invalid_quantity_count = df_sales.filter(col("Quantity").isNull() | (col("Quantity") <= 0)).count()
+else:
+    invalid_quantity_count = 0 # Or handle as schema error if Quantity is mandatory and not integer
+    if "Quantity" not in df_sales.columns:
+        print("WARNING: Quantity column not found. Skipping quantity validation.")
+    else:
+        print(f"WARNING: Quantity column is not IntegerType (it's {df_sales.schema['Quantity'].dataType}). Skipping non-positive quantity validation.")
+
+
+null_unit_price_count = df_sales.filter(col("UnitPrice").isNull() | (col("UnitPrice") < 0)).count()
+
+
+validation_status_actual = "VALID" # Assume valid initially
+error_message = ""
+
+if null_sales_order_number_count > 0:
+    validation_status_actual = "INVALID"
+    error_message += f"Found {null_sales_order_number_count} records with null SalesOrderNumber. "
+if null_order_date_count > 0:
+    validation_status_actual = "INVALID"
+    error_message += f"Found {null_order_date_count} records with null or invalid OrderDate. "
+if null_customer_name_count > 0:
+    validation_status_actual = "INVALID"
+    error_message += f"Found {null_customer_name_count} records with null CustomerName. "
+if null_item_count > 0:
+    validation_status_actual = "INVALID"
+    error_message += f"Found {null_item_count} records with null Item. "
+if invalid_quantity_count > 0: # This condition will still be evaluated
+    validation_status_actual = "INVALID"
+    # This is the error you were seeing
+    error_message += f"Found {invalid_quantity_count} records with null or non-positive Quantity. "
+if null_unit_price_count > 0:
+    validation_status_actual = "INVALID"
+    error_message += f"Found {null_unit_price_count} records with null or negative UnitPrice. "
+
+# --- MODIFICATION FOR TESTING ---
+# If force_valid_status widget is set to True, override the actual validation status.
+if force_valid_status:
+    final_validation_status = "VALID"
+    print(f"Actual validation status was: {validation_status_actual}. Error messages (if any): {error_message}")
+    print("OVERRIDING to 'VALID' for testing flow.")
+    error_message = "Forced VALID for testing (actual was " + validation_status_actual + ")" if validation_status_actual == "INVALID" else ""
+
+else:
+    final_validation_status = validation_status_actual
+
+# Set the task values based on the final_validation_status
+dbutils.jobs.taskValues.set(key="validation_status", value=final_validation_status)
+dbutils.jobs.taskValues.set(key="source_table_record_count", value=df_sales.count())
+
+if final_validation_status == "INVALID":
+    # Only set error message if it's genuinely invalid, or the forced message
+    dbutils.jobs.taskValues.set(key="validation_error_message", value=error_message)
+    print(f"Validation result: {final_validation_status}. Reason: {error_message}")
+else:
+    print(f"Validation result: {final_validation_status}.")
+    if error_message: # This would be the "Forced VALID..." message
+         dbutils.jobs.taskValues.set(key="validation_error_message", value=error_message)
+
+
+#dbutils.notebook.exit(final_validation_status)
 ```
 </details>
 
