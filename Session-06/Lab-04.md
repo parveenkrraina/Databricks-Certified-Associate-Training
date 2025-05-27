@@ -329,12 +329,12 @@ except Exception as e:
 
 ```python
 # N3_Archive_Raw_Sales
-from datetime import datetime
 
-dbutils.widgets.text("sales_table_name", "bronze_sales")
-dbutils.widgets.text("archive_path_base", "dbfs:/FileStore/lab_data/archived_sales/")
-dbutils.widgets.text("database_name", "module2_db")
-dbutils.widgets.text("validator_task_key", "Task_Validate_Sales")
+dbutils.widgets.text("sales_table_name", "bronze_sales", "Source Sales Table")
+dbutils.widgets.text("archive_path_base", "dbfs:/FileStore/lab_data/archived_sales/", "Base Archive Path") # Updated path
+dbutils.widgets.text("database_name", "module2_db", "Database Name")
+dbutils.widgets.text("validator_task_key", "Task_Validate_Sales", "Task key of the validation notebook")
+
 
 sales_table = dbutils.widgets.get("sales_table_name")
 archive_path_base = dbutils.widgets.get("archive_path_base")
@@ -342,15 +342,35 @@ db_name = dbutils.widgets.get("database_name")
 validator_task_key = dbutils.widgets.get("validator_task_key")
 full_sales_table_name = f"{db_name}.{sales_table}"
 
+from datetime import datetime
 timestamp_str = datetime.now().strftime("%Y%m%d%H%M%S")
 archive_path_final = f"{archive_path_base.rstrip('/')}/{timestamp_str}/"
 
-df_sales = spark.table(full_sales_table_name)
-df_sales.write.format("parquet").mode("overwrite").save(archive_path_final)
-archived_count = df_sales.count()
-dbutils.taskValues.set(key="archived_path", value=archive_path_final)
-dbutils.taskValues.set(key="archived_count", value=archived_count)
-dbutils.notebook.exit(f"Archiving task finished. Path: {archive_path_final}")
+print(f"Archiving table {full_sales_table_name} to {archive_path_final}")
+
+try:
+    # Getting values for context, not for conditional logic here as this task runs regardless.
+    validation_status = dbutils.taskValues.get(taskKey=validator_task_key, key="validation_status", default="N/A_STATUS", debugValue="DEBUG_ARCHIVE")
+    source_count = dbutils.taskValues.get(taskKey=validator_task_key, key="source_table_record_count", default=0, debugValue=0)
+    print(f"Upstream validation status for context: {validation_status}")
+    print(f"Upstream source record count for context: {source_count}")
+except Exception as e:
+    print(f"Could not retrieve some task values from '{validator_task_key}': {e}.")
+
+
+try:
+    df_sales = spark.table(full_sales_table_name)
+    df_sales.write.format("parquet").mode("overwrite").save(archive_path_final)
+    archived_count = df_sales.count()
+    print(f"Successfully archived {archived_count} records from {full_sales_table_name} to {archive_path_final}")
+    dbutils.taskValues.set(key="archived_path", value=archive_path_final)
+    dbutils.taskValues.set(key="archived_count", value=archived_count)
+    dbutils.notebook.exit(f"Archiving task finished. Path: {archive_path_final}")
+
+except Exception as e:
+    error_msg = f"Failed to archive {full_sales_table_name}: {e}"
+    print(error_msg)
+    dbutils.notebook.exit(error_msg) # Exiting with error to ensure job reflects failure if archive is critical
 ```
 </details>
 
@@ -367,34 +387,50 @@ dbutils.notebook.exit(f"Archiving task finished. Path: {archive_path_final}")
 # N4_Process_Sales_By_Category
 from pyspark.sql.functions import col
 
-dbutils.widgets.text("category_filter", "", "Category to filter (from {{item}})")
-dbutils.widgets.text("enriched_sales_table", "silver_sales_enriched")
-dbutils.widgets.text("output_path_base", "dbfs:/FileStore/lab_data/category_sales/")
-dbutils.widgets.text("database_name", "module2_db")
+dbutils.widgets.text("category_filter", "", "Category to filter and process (populated by {{item}})")
+dbutils.widgets.text("enriched_sales_table", "silver_sales_enriched", "Enriched Sales Table") # This is df_output from N2
+dbutils.widgets.text("output_path_base", "dbfs:/FileStore/lab_data/category_sales/", "Base output path for category sales")
+dbutils.widgets.text("database_name", "module2_db", "Database Name")
 
-current_category = dbutils.widgets.get("category_filter")
-enriched_table_name = dbutils.widgets.get("enriched_sales_table")
+current_category_widget = dbutils.widgets.get("category_filter")
+current_category = current_category_widget 
+
+enriched_sales_table_name = dbutils.widgets.get("enriched_sales_table")
 output_path_base = dbutils.widgets.get("output_path_base")
 db_name = dbutils.widgets.get("database_name")
 
-full_enriched_table_path = f"{db_name}.{enriched_table_name}"
-
-if not current_category:
-     dbutils.notebook.exit("ERROR: Category filter not provided.")
-
+full_enriched_sales_table_path = f"{db_name}.{enriched_sales_table_name}"
 safe_category_name = "".join(c if c.isalnum() else "_" for c in current_category)
 category_output_path = f"{output_path_base.rstrip('/')}/{safe_category_name}/"
 
-df_enriched_sales = spark.table(full_enriched_table_path)
+print(f"Processing sales for category: {current_category} (Safe name: {safe_category_name})")
+print(f"Input table: {full_enriched_sales_table_path}")
+print(f"Output path: {category_output_path}")
+
+if not current_category:
+    dbutils.notebook.exit("Category not provided. Exiting.")
+
+try:
+    df_enriched_sales = spark.table(full_enriched_sales_table_path)
+except Exception as e:
+    print(f"Error reading table {full_enriched_sales_table_path}: {e}")
+    dbutils.notebook.exit(f"Failed to read table: {full_enriched_sales_table_path}")
+
+# The silver_sales_enriched table (df_output in N2) contains 'Category' from products table.
+if "Category" not in df_enriched_sales.columns:
+    dbutils.notebook.exit(f"Enriched sales table missing 'Category' column for filtering.")
+
 df_category_sales = df_enriched_sales.filter(col("Category") == current_category)
 
 if df_category_sales.isEmpty():
-     dbutils.notebook.exit(f"No sales for category '{current_category}'")
+    print(f"No sales found for category: {current_category}")
+    dbutils.notebook.exit(f"No sales for category {current_category}")
 else:
-     df_category_sales.write.format("delta").mode("overwrite").save(category_output_path)
-     count = df_category_sales.count()
-     dbutils.taskValues.set(key=f"processed_count_{safe_category_name}", value=count)
-     dbutils.notebook.exit(f"Processed category '{current_category}', {count} records.")
+    df_category_sales.write.format("delta").mode("overwrite").save(category_output_path) # Save as Delta files, not table
+    count = df_category_sales.count()
+    print(f"Successfully processed and saved {count} sales records for category '{current_category}' to {category_output_path}")
+    dbutils.taskValues.set(key=f"processed_count_{safe_category_name}", value=count)
+    dbutils.notebook.exit(f"Processed category {current_category}")
 ```
 </details>
 
