@@ -42,7 +42,7 @@ def bronze_sales():
     )
 
 @dlt.table(
-  name="uc01.sales.silver_sales",
+  name="silver_sales",
   comment="Cleaned and deduplicated Silver sales data"
 )
 @dlt.expect("valid_quantity", "Quantity > 0")
@@ -68,7 +68,7 @@ SELECT
   SUM(Quantity * UnitPrice) AS total_sales,
   COUNT(DISTINCT CustomerId) AS unique_customers
 FROM
-  LIVE.sales.silver_sales
+  LIVE.silver_sales
 GROUP BY
   OrderDate;
 
