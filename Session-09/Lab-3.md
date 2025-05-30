@@ -55,6 +55,7 @@ Add the following to the first cell of your notebook:
 
 ```python
 import dlt
+import pyspark.sql.functions as F
 from pyspark.sql.functions import col, expr, to_date, year, current_date, upper, trim, regexp_replace, when, lit, sha2, concat_ws, lower
 from pyspark.sql.types import StringType, IntegerType, DoubleType, DateType, TimestampType
 ```
