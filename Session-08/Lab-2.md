@@ -30,10 +30,9 @@
 2. Click **Create Pipeline**.
 3. Enter pipeline name, e.g., `medallion_sql_pipeline`.
 4. Select appropriate cluster configuration (default is fine).
-5. Set pipeline mode to **Batch**.
+5. Set pipeline mode to **Trigger**.
 6. Specify a storage location for the pipeline (DBFS path or cloud storage).
-7. Under Pipeline settings, select **SQL** as the language.
-8. Save the pipeline (don’t start it yet).
+7. Save the pipeline (don’t start it yet).
 
 ---
 

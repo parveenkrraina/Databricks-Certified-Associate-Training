@@ -28,7 +28,7 @@ import dlt
 from pyspark.sql.functions import col
 
 @dlt.table(
-  name="uc01.sales.bronze_sales",
+  name="bronze_sales",
   comment="Raw sales data ingested to Bronze layer",
   table_properties={
     "quality": "bronze"
@@ -42,13 +42,13 @@ def bronze_sales():
     )
 
 @dlt.table(
-  name="uc01.sales.silver_sales",
+  name="silver_sales",
   comment="Cleaned and deduplicated Silver sales data"
 )
 @dlt.expect("valid_quantity", "Quantity > 0")
 @dlt.expect_or_drop("no_nulls", "CustomerId IS NOT NULL")
 def silver_sales():
-    df = dlt.read("uc.sales.bronze_sales")
+    df = dlt.read("bronze_sales")
     return df.filter(col("Quantity") > 0).dropDuplicates(["SalesOrderNumber", "SalesOrderLineNumber"])
 
 ```
@@ -68,7 +68,7 @@ SELECT
   SUM(Quantity * UnitPrice) AS total_sales,
   COUNT(DISTINCT CustomerId) AS unique_customers
 FROM
-  LIVE.uc01.sales.silver_sales
+  LIVE.silver_sales
 GROUP BY
   OrderDate;
 
@@ -109,9 +109,9 @@ ADD EXPECTATION valid_total_sales AS total_sales > 0;
 Run in Databricks SQL notebook or editor:
 
 ```sql
-SELECT * FROM live.bronze_sales LIMIT 10;
-SELECT * FROM live.silver_sales LIMIT 10;
-SELECT * FROM live.gold_sales_summary LIMIT 10;
+SELECT * FROM uc01.sales.bronze_sales LIMIT 10;
+SELECT * FROM uc01.sales.silver_sales LIMIT 10;
+SELECT * FROM uc01.sales.gold_sales_summary LIMIT 10;
 ```
 
 - Confirm raw data in Bronze, cleaned data in Silver, and aggregated metrics in Gold.
