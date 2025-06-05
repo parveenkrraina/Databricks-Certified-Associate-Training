@@ -4,7 +4,7 @@ This guide is designed to help students prepare for the **Databricks Certified D
 
 ## Exam Overview
 
-The Databricks Data Engineer Associate exam tests your ability to use Databricks for building and managing data pipelines, performing ETL, and working with Delta Lake and related features on AWS.
+The Databricks Data Engineer Associate exam tests your ability to use Databricks for building and managing data pipelines, performing ETL, and working with Delta Lake and related features on AWS/Azure/GCP.
 
 ## Key Exam Topics
 
